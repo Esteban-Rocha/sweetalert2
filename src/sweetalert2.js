@@ -1,20 +1,12 @@
 import defaultParams, { deprecatedParams } from './utils/params.js'
 import { swalClasses, iconTypes } from './utils/classes.js'
-import { colorLuminance, warn, error, warnOnce } from './utils/utils.js'
+import { objectToMap, warn, error, warnOnce, callIfFunction } from './utils/utils.js'
 import * as dom from './utils/dom.js'
 
 let popupParams = Object.assign({}, defaultParams)
 let queue = []
 
 let previousWindowKeyDown, windowOnkeydownOverridden
-
-/*
- * Check for the existence of Promise
- * Hopefully to avoid many github issues
- */
-if (typeof Promise === 'undefined') {
-  error('This package requires a Promise library, please include a shim to enable it in this browser (See: https://github.com/limonte/sweetalert2/wiki/Migration-from-SweetAlert-to-SweetAlert2#1-ie-support)')
-}
 
 /**
  * Show relevant warnings for given params
@@ -39,8 +31,12 @@ const showWarningsForParams = (params) => {
  * @returns {boolean}
  */
 const setParameters = (params) => {
-  // If a custom element is set, determine if it is valid
-  if ((typeof params.target === 'string' && !document.querySelector(params.target)) || (typeof params.target !== 'string' && !params.target.appendChild)) {
+  // Determine if the custom target element is valid
+  if (
+    !params.target ||
+    (typeof params.target === 'string' && !document.querySelector(params.target)) ||
+    (typeof params.target !== 'string' && !params.target.appendChild)
+  ) {
     warn('Target parameter is not valid, defaulting to "body"')
     params.target = 'body'
   }
@@ -56,52 +52,54 @@ const setParameters = (params) => {
   }
 
   // Set popup width
-  let popupWidth = (params.width === defaultParams.width && params.toast) ? 'auto' : params.width
-  popup.style.width = (typeof popupWidth === 'number') ? popupWidth + 'px' : popupWidth
+  if (params.width) {
+    popup.style.width = (typeof params.width === 'number') ? params.width + 'px' : params.width
+  }
 
-  let popupPadding = (params.padding === defaultParams.padding && params.toast) ? 'inherit' : params.padding
-  popup.style.padding = (typeof popupPadding === 'number') ? popupPadding + 'px' : popupPadding
-  popup.style.background = params.background
+  // Set popup padding
+  if (params.padding) {
+    popup.style.padding = (typeof params.padding === 'number') ? params.padding + 'px' : params.padding
+  }
+
+  // Set popup background
+  if (params.background) {
+    popup.style.background = params.background
+  }
+  const popupBackgroundColor = window.getComputedStyle(popup).getPropertyValue('background-color')
   const successIconParts = popup.querySelectorAll('[class^=swal2-success-circular-line], .swal2-success-fix')
   for (let i = 0; i < successIconParts.length; i++) {
-    successIconParts[i].style.background = params.background
+    successIconParts[i].style.backgroundColor = popupBackgroundColor
   }
 
   const container = dom.getContainer()
   const title = dom.getTitle()
-  const content = dom.getContent()
-  const buttonsWrapper = dom.getButtonsWrapper()
+  const content = dom.getContent().querySelector('#' + swalClasses.content)
+  const actions = dom.getActions()
   const confirmButton = dom.getConfirmButton()
   const cancelButton = dom.getCancelButton()
   const closeButton = dom.getCloseButton()
+  const footer = dom.getFooter()
 
   // Title
   if (params.titleText) {
     title.innerText = params.titleText
-  } else {
+  } else if (params.title) {
     title.innerHTML = params.title.split('\n').join('<br />')
   }
 
-  if (!params.backdrop) {
+  if (typeof params.backdrop === 'string') {
+    dom.getContainer().style.background = params.backdrop
+  } else if (!params.backdrop) {
     dom.addClass([document.documentElement, document.body], swalClasses['no-backdrop'])
   }
 
-  // Content
-  if (params.text || params.html) {
-    if (typeof params.html === 'object') {
-      content.innerHTML = ''
-      if (0 in params.html) {
-        for (let i = 0; i in params.html; i++) {
-          content.appendChild(params.html[i].cloneNode(true))
-        }
-      } else {
-        content.appendChild(params.html.cloneNode(true))
-      }
-    } else if (params.html) {
-      content.innerHTML = params.html
-    } else if (params.text) {
-      content.textContent = params.text
-    }
+  // Content as HTML
+  if (params.html) {
+    dom.parseHtmlToContainer(params.html, content)
+
+  // Content as plain text
+  } else if (params.text) {
+    content.textContent = params.text
     dom.show(content)
   } else {
     dom.hide(content)
@@ -110,6 +108,9 @@ const setParameters = (params) => {
   // Position
   if (params.position in swalClasses) {
     dom.addClass(container, swalClasses[params.position])
+  } else {
+    warn('The "position" parameter is not valid, defaulting to "center"')
+    dom.addClass(container, swalClasses.center)
   }
 
   // Grow
@@ -145,7 +146,7 @@ const setParameters = (params) => {
   // Progress steps
   let progressStepsContainer = dom.getProgressSteps()
   let currentProgressStep = parseInt(params.currentProgressStep === null ? sweetAlert.getQueueStep() : params.currentProgressStep, 10)
-  if (params.progressSteps.length) {
+  if (params.progressSteps && params.progressSteps.length) {
     dom.show(progressStepsContainer)
     dom.empty(progressStepsContainer)
     if (currentProgressStep >= params.progressSteps.length) {
@@ -165,7 +166,9 @@ const setParameters = (params) => {
       if (index !== params.progressSteps.length - 1) {
         let line = document.createElement('li')
         dom.addClass(line, swalClasses.progressline)
-        line.style.width = params.progressStepsDistance
+        if (params.progressStepsDistance) {
+          line.style.width = params.progressStepsDistance
+        }
         progressStepsContainer.appendChild(line)
       }
     })
@@ -252,11 +255,11 @@ const setParameters = (params) => {
     dom.hide(confirmButton)
   }
 
-  // Buttons wrapper
+  // Actions (buttons) wrapper
   if (!params.showConfirmButton && !params.showCancelButton) {
-    dom.hide(buttonsWrapper)
+    dom.hide(actions)
   } else {
-    dom.show(buttonsWrapper)
+    dom.show(actions)
   }
 
   // Edit text on confirm and cancel buttons
@@ -267,12 +270,6 @@ const setParameters = (params) => {
   confirmButton.setAttribute('aria-label', params.confirmButtonAriaLabel)
   cancelButton.setAttribute('aria-label', params.cancelButtonAriaLabel)
 
-  // Set buttons to selected background colors
-  if (params.buttonsStyling) {
-    confirmButton.style.backgroundColor = params.confirmButtonColor
-    cancelButton.style.backgroundColor = params.cancelButtonColor
-  }
-
   // Add buttons custom classes
   confirmButton.className = swalClasses.confirm
   dom.addClass(confirmButton, params.confirmButtonClass)
@@ -282,12 +279,28 @@ const setParameters = (params) => {
   // Buttons styling
   if (params.buttonsStyling) {
     dom.addClass([confirmButton, cancelButton], swalClasses.styled)
+
+    // Buttons background colors
+    if (params.confirmButtonColor) {
+      confirmButton.style.backgroundColor = params.confirmButtonColor
+    }
+    if (params.cancelButtonColor) {
+      cancelButton.style.backgroundColor = params.cancelButtonColor
+    }
+
+    // Loading state
+    const confirmButtonBackgroundColor = window.getComputedStyle(confirmButton).getPropertyValue('background-color')
+    confirmButton.style.borderLeftColor = confirmButtonBackgroundColor
+    confirmButton.style.borderRightColor = confirmButtonBackgroundColor
   } else {
     dom.removeClass([confirmButton, cancelButton], swalClasses.styled)
 
     confirmButton.style.backgroundColor = confirmButton.style.borderLeftColor = confirmButton.style.borderRightColor = ''
     cancelButton.style.backgroundColor = cancelButton.style.borderLeftColor = cancelButton.style.borderRightColor = ''
   }
+
+  // Footer
+  dom.parseHtmlToContainer(params.footer, footer)
 
   // CSS animation
   if (params.animation === true) {
@@ -301,7 +314,7 @@ const setParameters = (params) => {
     warn(
       'showLoaderOnConfirm is set to true, but preConfirm is not defined.\n' +
       'showLoaderOnConfirm should be used together with preConfirm, see usage example:\n' +
-      'https://limonte.github.io/sweetalert2/#ajax-request'
+      'https://sweetalert2.github.io/#ajax-request'
     )
   }
 }
@@ -400,6 +413,11 @@ const sweetAlert = (...args) => {
     return
   }
 
+  // Check for the existence of Promise
+  if (typeof Promise === 'undefined') {
+    error('This package requires a Promise library, please include a shim to enable it in this browser (See: https://github.com/sweetalert2/sweetalert2/wiki/Migration-from-SweetAlert-to-SweetAlert2#1-ie-support)')
+  }
+
   if (typeof args[0] === 'undefined') {
     error('SweetAlert2 expects at least 1 attribute!')
     return false
@@ -495,7 +513,7 @@ const sweetAlert = (...args) => {
         case 'select':
         case 'textarea':
         case 'file':
-          return dom.getChildByClass(popup, swalClasses[inputType])
+          return dom.getChildByClass(content, swalClasses[inputType])
         case 'checkbox':
           return popup.querySelector(`.${swalClasses.checkbox} input`)
         case 'radio':
@@ -504,7 +522,7 @@ const sweetAlert = (...args) => {
         case 'range':
           return popup.querySelector(`.${swalClasses.range} input`)
         default:
-          return dom.getChildByClass(popup, swalClasses.input)
+          return dom.getChildByClass(content, swalClasses.input)
       }
     }
 
@@ -581,34 +599,6 @@ const sweetAlert = (...args) => {
       const targetedCancel = cancelButton && (cancelButton === target || cancelButton.contains(target))
 
       switch (e.type) {
-        case 'mouseover':
-        case 'mouseup':
-          if (params.buttonsStyling) {
-            if (targetedConfirm) {
-              confirmButton.style.backgroundColor = colorLuminance(params.confirmButtonColor, -0.1)
-            } else if (targetedCancel) {
-              cancelButton.style.backgroundColor = colorLuminance(params.cancelButtonColor, -0.1)
-            }
-          }
-          break
-        case 'mouseout':
-          if (params.buttonsStyling) {
-            if (targetedConfirm) {
-              confirmButton.style.backgroundColor = params.confirmButtonColor
-            } else if (targetedCancel) {
-              cancelButton.style.backgroundColor = params.cancelButtonColor
-            }
-          }
-          break
-        case 'mousedown':
-          if (params.buttonsStyling) {
-            if (targetedConfirm) {
-              confirmButton.style.backgroundColor = colorLuminance(params.confirmButtonColor, -0.2)
-            } else if (targetedCancel) {
-              cancelButton.style.backgroundColor = colorLuminance(params.cancelButtonColor, -0.2)
-            }
-          }
-          break
         case 'click':
           // Clicked 'confirm'
           if (targetedConfirm && sweetAlert.isVisible()) {
@@ -724,13 +714,14 @@ const sweetAlert = (...args) => {
         if (e.target !== container) {
           return
         }
-        if (params.allowOutsideClick) {
+        if (callIfFunction(params.allowOutsideClick)) {
           dismissWith('overlay')
         }
       }
     }
 
-    const buttonsWrapper = dom.getButtonsWrapper()
+    const content = dom.getContent()
+    const actions = dom.getActions()
     const confirmButton = dom.getConfirmButton()
     const cancelButton = dom.getCancelButton()
 
@@ -775,7 +766,7 @@ const sweetAlert = (...args) => {
 
       if (e.key === 'Enter' && !e.isComposing) {
         if (e.target === getInput()) {
-          if (e.target.tagName.toLowerCase() === 'textarea') {
+          if (['textarea', 'file'].includes(params.input)) {
             return // do not submit
           }
 
@@ -817,7 +808,7 @@ const sweetAlert = (...args) => {
         }
 
       // ESC
-      } else if ((e.key === 'Escape' || e.key === 'Esc') && params.allowEscapeKey === true) {
+      } else if ((e.key === 'Escape' || e.key === 'Esc') && callIfFunction(params.allowEscapeKey) === true) {
         dismissWith('esc')
       }
     }
@@ -833,12 +824,6 @@ const sweetAlert = (...args) => {
       window.onkeydown = handleKeyDown
     }
 
-    // Loading state
-    if (params.buttonsStyling) {
-      confirmButton.style.borderLeftColor = params.confirmButtonColor
-      confirmButton.style.borderRightColor = params.confirmButtonColor
-    }
-
     /**
      * Show spinner instead of Confirm button and disable Cancel button
      */
@@ -846,11 +831,12 @@ const sweetAlert = (...args) => {
       if (!params.showConfirmButton) {
         dom.hide(confirmButton)
         if (!params.showCancelButton) {
-          dom.hide(dom.getButtonsWrapper())
+          dom.hide(dom.getActions())
         }
       }
-      dom.removeClass([popup, buttonsWrapper], swalClasses.loading)
+      dom.removeClass([popup, actions], swalClasses.loading)
       popup.removeAttribute('aria-busy')
+      popup.removeAttribute('data-loading')
       confirmButton.disabled = false
       cancelButton.disabled = false
     }
@@ -860,8 +846,11 @@ const sweetAlert = (...args) => {
     sweetAlert.getInput = () => getInput()
     sweetAlert.getImage = () => dom.getImage()
     sweetAlert.getButtonsWrapper = () => dom.getButtonsWrapper()
+    sweetAlert.getActions = () => dom.getActions()
     sweetAlert.getConfirmButton = () => dom.getConfirmButton()
     sweetAlert.getCancelButton = () => dom.getCancelButton()
+    sweetAlert.getFooter = () => dom.getFooter()
+    sweetAlert.isLoading = () => dom.isLoading()
 
     sweetAlert.enableButtons = () => {
       confirmButton.disabled = false
@@ -917,6 +906,9 @@ const sweetAlert = (...args) => {
     sweetAlert.showValidationError = (error) => {
       const validationError = dom.getValidationError()
       validationError.innerHTML = error
+      const popupComputedStyle = window.getComputedStyle(popup)
+      validationError.style.marginLeft = `-${popupComputedStyle.getPropertyValue('padding-left')}`
+      validationError.style.marginRight = `-${popupComputedStyle.getPropertyValue('padding-right')}`
       dom.show(validationError)
 
       const input = getInput()
@@ -971,7 +963,7 @@ const sweetAlert = (...args) => {
     let input
     for (let i = 0; i < inputTypes.length; i++) {
       const inputClass = swalClasses[inputTypes[i]]
-      const inputContainer = dom.getChildByClass(popup, inputClass)
+      const inputContainer = dom.getChildByClass(content, inputClass)
       input = getInput(inputTypes[i])
 
       // set attributes
@@ -1006,20 +998,20 @@ const sweetAlert = (...args) => {
       case 'number':
       case 'tel':
       case 'url':
-        input = dom.getChildByClass(popup, swalClasses.input)
+        input = dom.getChildByClass(content, swalClasses.input)
         input.value = params.inputValue
         input.placeholder = params.inputPlaceholder
         input.type = params.input
         dom.show(input)
         break
       case 'file':
-        input = dom.getChildByClass(popup, swalClasses.file)
+        input = dom.getChildByClass(content, swalClasses.file)
         input.placeholder = params.inputPlaceholder
         input.type = params.input
         dom.show(input)
         break
       case 'range':
-        const range = dom.getChildByClass(popup, swalClasses.range)
+        const range = dom.getChildByClass(content, swalClasses.range)
         const rangeInput = range.querySelector('input')
         const rangeOutput = range.querySelector('output')
         rangeInput.value = params.inputValue
@@ -1028,7 +1020,7 @@ const sweetAlert = (...args) => {
         dom.show(range)
         break
       case 'select':
-        const select = dom.getChildByClass(popup, swalClasses.select)
+        const select = dom.getChildByClass(content, swalClasses.select)
         select.innerHTML = ''
         if (params.inputPlaceholder) {
           const placeholder = document.createElement('option')
@@ -1039,11 +1031,12 @@ const sweetAlert = (...args) => {
           select.appendChild(placeholder)
         }
         populateInputOptions = (inputOptions) => {
-          for (let optionValue in inputOptions) {
+          inputOptions = objectToMap(inputOptions)
+          for (const [optionValue, optionLabel] of inputOptions) {
             const option = document.createElement('option')
             option.value = optionValue
-            option.innerHTML = inputOptions[optionValue]
-            if (params.inputValue.toString() === optionValue) {
+            option.innerHTML = optionLabel
+            if (params.inputValue.toString() === optionValue.toString()) {
               option.selected = true
             }
             select.appendChild(option)
@@ -1053,24 +1046,22 @@ const sweetAlert = (...args) => {
         }
         break
       case 'radio':
-        const radio = dom.getChildByClass(popup, swalClasses.radio)
+        const radio = dom.getChildByClass(content, swalClasses.radio)
         radio.innerHTML = ''
         populateInputOptions = (inputOptions) => {
-          for (let radioValue in inputOptions) {
+          inputOptions = objectToMap(inputOptions)
+          for (const [radioValue, radioLabel] of inputOptions) {
             const radioInput = document.createElement('input')
-            const radioLabel = document.createElement('label')
-            const radioLabelSpan = document.createElement('span')
+            const radioLabelElement = document.createElement('label')
             radioInput.type = 'radio'
             radioInput.name = swalClasses.radio
             radioInput.value = radioValue
-            if (params.inputValue.toString() === radioValue) {
+            if (params.inputValue.toString() === radioValue.toString()) {
               radioInput.checked = true
             }
-            radioLabelSpan.innerHTML = inputOptions[radioValue]
-            radioLabel.appendChild(radioInput)
-            radioLabel.appendChild(radioLabelSpan)
-            radioLabel.for = radioInput.id
-            radio.appendChild(radioLabel)
+            radioLabelElement.innerHTML = radioLabel
+            radioLabelElement.insertBefore(radioInput, radioLabelElement.firstChild)
+            radio.appendChild(radioLabelElement)
           }
           dom.show(radio)
           const radios = radio.querySelectorAll('input')
@@ -1080,7 +1071,7 @@ const sweetAlert = (...args) => {
         }
         break
       case 'checkbox':
-        const checkbox = dom.getChildByClass(popup, swalClasses.checkbox)
+        const checkbox = dom.getChildByClass(content, swalClasses.checkbox)
         const checkboxInput = getInput('checkbox')
         checkboxInput.type = 'checkbox'
         checkboxInput.value = 1
@@ -1096,7 +1087,7 @@ const sweetAlert = (...args) => {
         dom.show(checkbox)
         break
       case 'textarea':
-        const textarea = dom.getChildByClass(popup, swalClasses.textarea)
+        const textarea = dom.getChildByClass(content, swalClasses.textarea)
         textarea.value = params.inputValue
         textarea.placeholder = params.inputPlaceholder
         dom.show(textarea)
@@ -1118,14 +1109,14 @@ const sweetAlert = (...args) => {
       } else if (typeof params.inputOptions === 'object') {
         populateInputOptions(params.inputOptions)
       } else {
-        error('Unexpected type of inputOptions! Expected object or Promise, got ' + typeof params.inputOptions)
+        error('Unexpected type of inputOptions! Expected object, Map or Promise, got ' + typeof params.inputOptions)
       }
     }
 
     openPopup(params.animation, params.onBeforeOpen, params.onOpen)
 
     if (!params.toast) {
-      if (!params.allowEnterKey) {
+      if (!callIfFunction(params.allowEnterKey)) {
         if (document.activeElement) {
           document.activeElement.blur()
         }
@@ -1283,16 +1274,17 @@ sweetAlert.showLoading = sweetAlert.enableLoading = () => {
     sweetAlert('')
   }
   popup = dom.getPopup()
-  const buttonsWrapper = dom.getButtonsWrapper()
+  const actions = dom.getActions()
   const confirmButton = dom.getConfirmButton()
   const cancelButton = dom.getCancelButton()
 
-  dom.show(buttonsWrapper)
+  dom.show(actions)
   dom.show(confirmButton, 'inline-block')
-  dom.addClass([popup, buttonsWrapper], swalClasses.loading)
+  dom.addClass([popup, actions], swalClasses.loading)
   confirmButton.disabled = true
   cancelButton.disabled = true
 
+  popup.setAttribute('data-loading', true)
   popup.setAttribute('aria-busy', true)
   popup.focus()
 }

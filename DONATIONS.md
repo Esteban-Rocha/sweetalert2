@@ -3,12 +3,18 @@ We would like to thank everyone who contributed to this library. If you find our
 
 # Patrons
 
+- **[Olli Murto](https://www.patreon.com/user/?u=9095640)** ($1 per month)
+
 - **[Samuel Georges](https://www.patreon.com/daftspunk)**, the creator of [October CMS](https://github.com/octobercms/october) ($1 per month)
 
 - **[Albert Møller Nielsen](https://www.patreon.com/user?u=4221410)** ($1 per month)
 
 
 # Donors
+
+- **Daniel Seuffer** (10 EUR)
+
+    > Thx for this very sweet alert!! And the continuous support. :-)
 
 - **Legoman99573** (0,20 EUR)
 

@@ -1,35 +1,42 @@
 {
   "name": "sweetalert2",
-  "version": "7.2.0",
-  "repository": "limonte/sweetalert2",
-  "homepage": "https://limonte.github.io/sweetalert2/",
+  "version": "7.9.1",
+  "repository": "sweetalert2/sweetalert2",
+  "homepage": "https://sweetalert2.github.io/",
   "description": "A beautiful, responsive, customizable and accessible (WAI-ARIA) replacement for JavaScript's popup boxes, supported fork of sweetalert",
   "main": "dist/sweetalert2.all.js",
   "jsnext:main": "src/sweetalert2.js",
   "types": "sweetalert2.d.ts",
   "devDependencies": {
-    "babel-core": "latest",
-    "babel-plugin-array-includes": "latest",
-    "babel-plugin-external-helpers": "latest",
-    "babel-plugin-transform-object-assign": "latest",
-    "babel-preset-es2015": "latest",
-    "bundlesize": "^0.15.3",
-    "gulp": "latest",
-    "gulp-autoprefixer": "latest",
+    "babel-core": "^6.23.1",
+    "babel-plugin-array-includes": "^2.0.3",
+    "babel-plugin-external-helpers": "^6.22.0",
+    "babel-plugin-transform-object-assign": "^6.22.0",
+    "babel-preset-es2015": "^6.24.1",
+    "browser-sync": "^2.23.3",
+    "bundlesize": "^0.16.0",
+    "event-stream": "^3.3.4",
+    "execa": "^0.9.0",
+    "gulp": "^3.9.1",
+    "gulp-autoprefixer": "^4.1.0",
     "gulp-clean-css": "^3.9.0",
-    "gulp-rename": "latest",
-    "gulp-rollup": "latest",
-    "gulp-sass": "latest",
-    "gulp-sass-lint": "latest",
+    "gulp-rename": "^1.2.2",
+    "gulp-rollup": "^2.16.2",
+    "gulp-sass": "^3.1.0",
+    "gulp-sass-lint": "^1.3.4",
     "gulp-standard": "^8.0.0",
     "gulp-tslint": "^8.1.2",
     "gulp-typescript": "^3.2.3",
-    "gulp-uglify": "latest",
-    "rollup": "^0.51.8",
+    "gulp-uglify": "^3.0.0",
+    "promise-polyfill": "^7.0.2",
+    "mkdirp": "^0.5.1",
+    "pify": "^3.0.0",
+    "rimraf": "^2.6.2",
+    "rollup": "^0.55.1",
     "rollup-plugin-babel": "^3.0.2",
-    "rollup-plugin-css-only": "^0.2.0",
+    "rollup-plugin-css-only": "^0.4.0",
     "standard": "^8.0.0",
-    "testem": "latest",
+    "testem": "^2.0.0",
     "tslint": "^5.8.0",
     "typescript": "^2.5.3",
     "uglify-js": "^3.1.10"
@@ -37,6 +44,12 @@
   "standard": {
     "ignore": [
       "dist/"
+    ]
+  },
+  "greenkeeper": {
+    "ignore": [
+      "gulp-standard",
+      "standard"
     ]
   },
   "files": [
@@ -57,18 +70,23 @@
     "sweetalert",
     "sweetalert2",
     "alert",
-    "prompt"
+    "prompt",
+    "confirm"
   ],
   "engines": {
     "node": ">=0.10.0"
   },
   "scripts": {
-    "test": "testem ci",
-    "lint-dts": "tslint sweetalert2.d.ts --format verbose",
-    "check-dts": "tsc sweetalert2.d.ts && npm run lint-dts",
-    "assume-dist-unchanged": "git ls-files dist | tr '\\n' ' ' | xargs git update-index --assume-unchanged",
-    "no-assume-dist-unchanged": "git ls-files dist | tr '\\n' ' ' | xargs git update-index --no-assume-unchanged"
+    "start": "gulp watch",
+    "fix:lint": "standard --fix",
+    "test": "npm run build && npm run check",
+    "build": "gulp build",
+    "check": "npm run check:bundlesize && npm run check:tests && npm run check:ts",
+    "check:bundlesize": "bundlesize -f dist/sweetalert2.all.min.js -s 15kB",
+    "check:tests": "testem ci",
+    "check:ts": "tsc sweetalert2.d.ts",
+    "release": "node release"
   },
-  "bugs": "https://github.com/limonte/sweetalert2/issues",
+  "bugs": "https://github.com/sweetalert2/sweetalert2/issues",
   "license": "MIT"
 }
